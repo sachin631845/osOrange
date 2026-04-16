@@ -1,3 +1,16 @@
+
+# OS - U4 Orange Problem
+
+| Field | Details |
+|-------|---------|
+| Name | Sachin B R  |
+| SRN | PES1UG25CS839|
+| Section | K-SEC |
+| Date | 16-04-2026 |
+
+
+---
+
 # Building PES-VCS — A Version Control System from Scratch
 
 **Objective:** Build a local version control system that tracks file changes, stores snapshots efficiently, and supports commit history. Every component maps directly to operating system and filesystem concepts.
@@ -379,7 +392,9 @@ The test program verifies:
 ![Screenshot 1A](screenshots/1a.png)
 
 **📸 Screenshot 1B:** `find .pes/objects -type f` showing the sharded directory structure.
+
 ![Screenshot 1B](screenshots/1b.png)
+
 ---
 
 ## Phase 2: Tree Objects
@@ -410,7 +425,11 @@ The test program verifies:
 
 **📸 Screenshot 2A:** Output of `./test_tree` showing all tests passing.
 
+![Screenshot 2A](screenshots/2a.png)
+
 **📸 Screenshot 2B:** Pick a tree object from `find .pes/objects -type f` and run `xxd .pes/objects/XX/YYY... | head -20` to show the raw binary format.
+
+![Screenshot 2B](screenshots/2b.png)
 
 ---
 
@@ -467,9 +486,11 @@ cat .pes/index    # Human-readable text format
 ```
 
 **📸 Screenshot 3A:** Run `./pes init`, `./pes add file1.txt file2.txt`, `./pes status` — show the output.
+![Screenshot 3A](screenshots/3a.png)
 
 **📸 Screenshot 3B:** `cat .pes/index` showing the text-format index with your entries.
 
+![Screenshot 3B](screenshots/3b.png)
 ---
 
 ## Phase 4: Commits and History
@@ -518,10 +539,13 @@ make test-integration
 ```
 
 **📸 Screenshot 4A:** Output of `./pes log` showing three commits with hashes, authors, timestamps, and messages.
+![Screenshot 4A](screenshots/4a.png)
 
 **📸 Screenshot 4B:** `find .pes -type f | sort` showing object store growth after three commits.
+![Screenshot 4B](screenshots/4b.png)
 
 **📸 Screenshot 4C:** `cat .pes/refs/heads/main` and `cat .pes/HEAD` showing the reference chain.
+![Screenshot 4C](screenshots/4c.png)
 
 ---
 
@@ -532,16 +556,22 @@ The following questions cover filesystem concepts beyond the implementation scop
 ### Branching and Checkout
 
 **Q5.1:** A branch in Git is just a file in `.git/refs/heads/` containing a commit hash. Creating a branch is creating a file. Given this, how would you implement `pes checkout <branch>` — what files need to change in `.pes/`, and what must happen to the working directory? What makes this operation complex?
+**Answer:** To implement `pes checkout <branch>`, two files in `.pes/` must change: HEAD must be updated to `ref: refs/heads/<branch>`, and the working directory files must be replaced with the files from the target branch's tree. Steps: read the branch file to get the commit hash, read that commit to get the tree hash, walk the tree recursively and restore all files to disk. What makes it complex is safety — before touching any file, we must check if the user has uncommitted changes. Also, files that exist in the current branch but not the target must be deleted, and new files from the target must be created.
+
 
 **Q5.2:** When switching branches, the working directory must be updated to match the target branch's tree. If the user has uncommitted changes to a tracked file, and that file differs between branches, checkout must refuse. Describe how you would detect this "dirty working directory" conflict using only the index and the object store.
+**Answer:** For each entry in the index, call `stat()` on the file in the working directory. Compare `st.st_mtime` and `st.st_size` with the values stored in the index. If they differ, re-hash the file and compare with the stored blob hash. If the hashes differ, the file is dirty. If that same file also differs between the two branches (its blob hash in the current tree differs from the target tree), checkout must refuse with an error to avoid losing the user's changes.
 
 **Q5.3:** "Detached HEAD" means HEAD contains a commit hash directly instead of a branch reference. What happens if you make commits in this state? How could a user recover those commits?
+**Answer:** In detached HEAD state, commits are still written to the object store correctly and each commit points to its parent. However, no branch pointer is updated — only HEAD itself holds the latest hash. If you switch away, those commits become unreachable and will eventually be deleted by garbage collection. To recover: note the commit hash from HEAD before switching, then create a new branch pointing to it using `echo "<hash>" > .pes/refs/heads/recovered`. This makes the commits reachable again.
 
 ### Garbage Collection and Space Reclamation
 
 **Q6.1:** Over time, the object store accumulates unreachable objects — blobs, trees, or commits that no branch points to (directly or transitively). Describe an algorithm to find and delete these objects. What data structure would you use to track "reachable" hashes efficiently? For a repository with 100,000 commits and 50 branches, estimate how many objects you'd need to visit.
+**Answer:** Use a mark-and-sweep algorithm. Mark phase: start from all branch refs in `.pes/refs/heads/`, walk every commit's parent chain, and for each commit walk its tree recursively — adding every commit, tree, and blob hash to a reachable set (a hash set for O(1) lookup). Sweep phase: walk all files in `.pes/objects/`, reconstruct each hash from its path, and delete any not in the reachable set. For 100,000 commits with ~10 trees and ~20 blobs each, you would visit approximately 3,100,000 objects in the mark phase.
 
 **Q6.2:** Why is it dangerous to run garbage collection concurrently with a commit operation? Describe a race condition where GC could delete an object that a concurrent commit is about to reference. How does Git's real GC avoid this?
+**Answer:** Race condition: (1) a commit writes a new blob to the object store, (2) GC runs its mark phase and reads HEAD — which still points to the old commit — so the new blob is not marked as reachable, (3) GC deletes the new blob, (4) the commit then updates HEAD to reference the deleted blob — repository is now corrupted. Git avoids this by using a grace period (default 2 weeks) — objects newer than the grace period are never deleted even if unreachable. This ensures any object written by a concurrent commit is safe because it was just created.
 
 ---
 
