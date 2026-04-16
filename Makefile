@@ -2,8 +2,6 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2
 LDFLAGS = -lcrypto
 
-# ─── Main binary ─────────────────────────────────────────────────────────────
-
 SRCS = object.c tree.c index.c commit.c pes.c
 OBJS = $(SRCS:.c=.o)
 
@@ -13,15 +11,11 @@ pes: $(OBJS)
 %.o: %.c pes.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# ─── Test binaries ───────────────────────────────────────────────────────────
-
 test_objects: test_objects.o object.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-test_tree: test_tree.o object.o tree.o
+test_tree: test_tree.o object.o tree.o index.o
 	$(CC) -o $@ $^ $(LDFLAGS)
-
-# ─── Convenience targets ────────────────────────────────────────────────────
 
 .PHONY: all clean test test-unit test-integration
 
